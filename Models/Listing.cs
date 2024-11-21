@@ -33,7 +33,7 @@ public partial class Listing
 
     public int? VipPackageId { get; set; }
 
-    public DateOnly? VipExpiryDate { get; set; }
+    public DateTime? VipExpiryDate { get; set; }
 
     public string? Status { get; set; }
 

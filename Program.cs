@@ -20,6 +20,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        options.JsonSerializerOptions.PropertyNamingPolicy = null; 
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
     });
 
 // Register services
@@ -106,7 +108,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.Run();
 
-// Helper function to seed roles and admin user
+
 static async Task SeedRolesAndAdminUserAsync(RealEstateContext context)
 {
     await context.Database.EnsureCreatedAsync();

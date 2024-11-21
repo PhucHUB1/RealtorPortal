@@ -16,7 +16,7 @@ public class ListingResponseDto
     public int DistrictId { get; set; }
     public int? WardId { get; set; }
     public int? VipPackageId { get; set; }
-    public DateOnly? VipExpiryDate { get; set; }
+    public DateTime? VipExpiryDate { get; set; }
     public string? Status { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

@@ -28,7 +28,7 @@ public static class ListingMapper
             Status = listing.Status,
             CreatedAt = listing.CreatedAt,
             UpdatedAt = listing.UpdatedAt,
-            ImageUrls = listing.Images.Select(img => img.Url).ToList() 
+            ImageUrls = listing.Images?.Select(img => img.Url).ToList() ?? new List<string>()
         };
     }
 
@@ -36,7 +36,6 @@ public static class ListingMapper
     {
         return new Listing
         {
-            UserId = request.UserId,
             Title = request.Title,
             Description = request.Description,
             PropertyTypeId = request.PropertyTypeId,
@@ -48,10 +47,15 @@ public static class ListingMapper
             CityId = request.CityId,
             DistrictId = request.DistrictId,
             WardId = request.WardId,
-            VipPackageId = request.VipPackageId,
-            VipExpiryDate = request.VipExpiryDate,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+    }
+
+    public static void UpdateVipDetails(this Listing listing, int vipPackageId, DateTime vipExpiryDate)
+    {
+        listing.VipPackageId = vipPackageId;
+        listing.VipExpiryDate = vipExpiryDate;
+        listing.UpdatedAt = DateTime.UtcNow;
     }
 }

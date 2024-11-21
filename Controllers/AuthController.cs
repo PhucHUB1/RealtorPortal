@@ -25,7 +25,7 @@ namespace RealEstate.Controllers
         {
             var response = await _userService.AuthenticateAsync(loginDto);
             if (response == null)
-                return Unauthorized(new { Message = "Invalid credentials" });
+                return Unauthorized(new { Message = "Invalid username or password" });
 
             return Ok(response);
         }

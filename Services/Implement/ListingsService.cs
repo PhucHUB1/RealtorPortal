@@ -4,101 +4,164 @@ using RealEstate.Dto.Response;
 using RealEstate.Mapper;
 using RealEstate.Models;
 
-namespace RealEstate.Services.Implement;
-
-public class ListingsService(RealEstateContext context) : IListingsService
+namespace RealEstate.Services.Implement
 {
-    public async Task<IEnumerable<ListingResponseDto>> GetAllAsync()
+    public class ListingsService : IListingsService
     {
-        var listings = await context.Listings.ToListAsync();
-        return listings.Select(l => l.ToResponse());
-    }
+        private readonly RealEstateContext _context;
 
-    public async Task<ListingResponseDto> CreateAsync(ListingRequestDto request)
-    {
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        public ListingsService(RealEstateContext context)
+        {
+            _context = context;
+        }
 
-        try
+        // Tạo Listing tạm thời
+        public async Task<ListingResponseDto> CreateTemporaryListingAsync(ListingRequestDto request, int userId)
         {
             var listing = request.ToEntity();
-            context.Listings.Add(listing);
-            await context.SaveChangesAsync();
-            
+            listing.UserId = userId;
+            listing.CreatedAt = DateTime.UtcNow;
+            listing.UpdatedAt = DateTime.UtcNow;
+
+            // Lưu Listing vào DB
+            _context.Listings.Add(listing);
+            await _context.SaveChangesAsync();
+
+            // Nếu có ảnh, xử lý lưu ảnh
             if (request.Images != null && request.Images.Any())
             {
-                var imageEntities = new List<Image>();
-
-                foreach (var image in request.Images)
-                {
-                    var fileName = Guid.NewGuid() + Path.GetExtension(image.FileName);
-                    var filePath = Path.Combine("wwwroot/images", fileName);
-
-
-                    await using (var stream = new FileStream(filePath, FileMode.Create))
-                    {
-                        await image.CopyToAsync(stream);
-                    }
-
-                  
-                    imageEntities.Add(new Image
-                    {
-                        ListingId = listing.Id,
-                        Url = $"/images/{fileName}",
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-
-                context.Images.AddRange(imageEntities);
-                await context.SaveChangesAsync();
+                var imageEntities = await SaveImagesAsync(request.Images, listing.Id);
+                _context.Images.AddRange(imageEntities);
+                await _context.SaveChangesAsync();
             }
 
-            await transaction.CommitAsync();
             return listing.ToResponse();
         }
-        catch
+
+        // Cập nhật Listing
+        public async Task<ListingResponseDto> UpdateListingAsync(int id, ListingRequestDto request, int userId)
         {
-            await transaction.RollbackAsync();
-            throw;
+            var listing = await _context.Listings.Include(l => l.Images).FirstOrDefaultAsync(l => l.Id == id);
+
+            if (listing == null || listing.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Listing not found or unauthorized.");
+            }
+
+            // Cập nhật thông tin cơ bản
+            listing.Title = request.Title ?? listing.Title;
+            listing.Description = request.Description ?? listing.Description;
+            listing.PropertyTypeId = request.PropertyTypeId != 0 ? request.PropertyTypeId : listing.PropertyTypeId;
+            listing.Price = request.Price != 0 ? request.Price : listing.Price;
+            listing.Area = request.Area != 0 ? request.Area : listing.Area;
+            listing.Address = request.Address ?? listing.Address;
+            listing.CityId = request.CityId != 0 ? request.CityId : listing.CityId;
+            listing.DistrictId = request.DistrictId != 0 ? request.DistrictId : listing.DistrictId;
+            listing.WardId = request.WardId ?? listing.WardId;
+            listing.UpdatedAt = DateTime.UtcNow;
+
+            // Nếu có ảnh mới, thêm ảnh vào Listing
+            if (request.Images != null && request.Images.Any())
+            {
+                var imageEntities = await SaveImagesAsync(request.Images, listing.Id);
+                _context.Images.AddRange(imageEntities);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return listing.ToResponse();
         }
-    }
+    
+        // Gán gói VIP cho Listing
+        public async Task<ListingResponseDto> AddVipPackageToListingAsync(VipPackageSelectionDto request, int userId)
+        {
+            var listing = await _context.Listings.FindAsync(request.ListingId);
+            if (listing == null || listing.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Listing not found or unauthorized.");
+            }
 
-    public async Task<ListingResponseDto> GetByIdAsync(int id)
-    {
-        var listing = await context.Listings
-            .Include(l => l.Images) 
-            .FirstOrDefaultAsync(l => l.Id == id);
+            var vipPackage = await _context.ListingsVipPackages.FindAsync(request.VipPackageId);
+            if (vipPackage == null)
+            {
+                throw new KeyNotFoundException("VIP package not found.");
+            }
 
-        if (listing == null)
-            throw new KeyNotFoundException($"Listing with ID {id} not found.");
+            listing.VipPackageId = request.VipPackageId;
+            listing.VipExpiryDate = listing.CreatedAt?.AddDays(vipPackage.DurationDays);
+            listing.UpdatedAt = DateTime.UtcNow;
 
-        return listing.ToResponse();
-    }
+            _context.Listings.Update(listing);
+            await _context.SaveChangesAsync();
 
+            return listing.ToResponse();
+        }
 
-    public async Task<ListingResponseDto> UpdateAsync(int id, ListingRequestDto request)
-    {
-        var listing = await context.Listings.FindAsync(id);
-        if (listing == null) throw new KeyNotFoundException($"Listing with ID {id} not found.");
+        // Lấy danh sách Listing đã đăng ký gói VIP và còn hiệu lực
+        public async Task<IEnumerable<ListingResponseDto>> GetAllAsync()
+        {
+            var listings = await _context.Listings
+                .Where(l => l.VipPackageId != null && l.VipExpiryDate > DateTime.UtcNow)
+                .Include(l => l.Images) // Bao gồm ảnh
+                .ToListAsync();
 
-        listing.Title = request.Title ?? listing.Title;
-        listing.Description = request.Description ?? listing.Description;
-        listing.Price = request.Price != 0 ? request.Price : listing.Price;
-        listing.Area = request.Area != 0 ? request.Area : listing.Area;
-        listing.Address = request.Address ?? listing.Address;
-        listing.UpdatedAt = DateTime.Now;
+            return listings.Select(l => l.ToResponse());
+        }
 
-        context.Listings.Update(listing);
-        await context.SaveChangesAsync();
-        return listing.ToResponse();
-    }
+        // Lấy chi tiết Listing đã đăng ký gói VIP và còn hiệu lực
+        public async Task<ListingResponseDto?> GetByIdAsync(int id)
+        {
+            var listing = await _context.Listings
+                .Include(l => l.Images)
+                .FirstOrDefaultAsync(l => l.Id == id && l.VipPackageId != null && l.VipExpiryDate > DateTime.UtcNow);
 
-    public async Task<bool> DeleteAsync(int id)
-    {
-        var listing = await context.Listings.FindAsync(id);
-        if (listing == null) return false;
+            return listing?.ToResponse();
+        }
 
-        context.Listings.Remove(listing);
-        await context.SaveChangesAsync();
-        return true;
+        // Xóa Listing
+        public async Task<bool> DeleteListingAsync(int id, int userId)
+        {
+            var listing = await _context.Listings.FindAsync(id);
+
+            if (listing == null || listing.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Listing not found or unauthorized.");
+            }
+
+            // Xóa Listing
+            _context.Listings.Remove(listing);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        // Lưu ảnh vào thư mục và cơ sở dữ liệu
+        private async Task<List<Image>> SaveImagesAsync(List<IFormFile> images, int listingId)
+        {
+            var imageEntities = new List<Image>();
+
+            foreach (var image in images)
+            {
+                // Đặt tên file duy nhất
+                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(image.FileName)}";
+                var filePath = Path.Combine("wwwroot/images", fileName);
+
+                // Lưu file vào thư mục
+                await using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await image.CopyToAsync(stream);
+                }
+
+                // Thêm thông tin vào Image entity
+                imageEntities.Add(new Image
+                {
+                    ListingId = listingId,
+                    Url = $"/images/{fileName}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            return imageEntities;
+        }
     }
 }
