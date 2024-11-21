@@ -11,11 +11,11 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure database context
+
 builder.Services.AddDbContext<RealEstateContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure controllers with JSON options
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -125,8 +125,7 @@ static async Task SeedRolesAndAdminUserAsync(RealEstateContext context)
         await context.Roles.AddAsync(adminRole);
         await context.SaveChangesAsync();
     }
-
-    // Ensure Admin user exists
+    
     if (!await context.Users.AnyAsync(u => u.RoleId == adminRole.Id))
     {
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword("admin123");
@@ -142,8 +141,7 @@ static async Task SeedRolesAndAdminUserAsync(RealEstateContext context)
         });
         await context.SaveChangesAsync();
     }
-
-    // Ensure User role exists
+    
     var userRole = await context.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == "User");
     if (userRole == null)
     {

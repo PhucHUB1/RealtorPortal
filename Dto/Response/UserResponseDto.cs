@@ -11,4 +11,5 @@ public class UserResponseDto
     public string? Status { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public RoleResponseDto? Role { get; set; } 
 }

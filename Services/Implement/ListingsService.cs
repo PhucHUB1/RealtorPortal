@@ -96,19 +96,18 @@ namespace RealEstate.Services.Implement
 
             return listing.ToResponse();
         }
-
-        // Lấy danh sách Listing đã đăng ký gói VIP và còn hiệu lực
+    
         public async Task<IEnumerable<ListingResponseDto>> GetAllAsync()
         {
             var listings = await _context.Listings
                 .Where(l => l.VipPackageId != null && l.VipExpiryDate > DateTime.UtcNow)
-                .Include(l => l.Images) // Bao gồm ảnh
+                .Include(l => l.Images) 
                 .ToListAsync();
 
             return listings.Select(l => l.ToResponse());
         }
 
-        // Lấy chi tiết Listing đã đăng ký gói VIP và còn hiệu lực
+     
         public async Task<ListingResponseDto?> GetByIdAsync(int id)
         {
             var listing = await _context.Listings
